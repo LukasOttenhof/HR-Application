@@ -1,0 +1,400 @@
+Index: app/src/main/java/com/example/wolseytechhr/FileCenter.java
+IDEA additional info:
+Subsystem: com.intellij.openapi.diff.impl.patch.BaseRevisionTextPatchEP
+<+>package com.example.wolseytechhr;\r\n\r\nimport androidx.appcompat.app.AlertDialog;\r\nimport androidx.appcompat.app.AppCompatActivity;\r\n\r\nimport android.content.Context;\r\nimport android.content.Intent;\r\nimport android.content.SharedPreferences;\r\nimport android.graphics.Color;\r\nimport android.graphics.Paint;\r\nimport android.graphics.Typeface;\r\nimport android.net.ConnectivityManager;\r\nimport android.net.NetworkInfo;\r\nimport android.net.Uri;\r\nimport android.os.Bundle;\r\nimport java.util.*;\r\n\r\nimport android.util.DisplayMetrics;\r\nimport android.util.Log;\r\nimport android.util.TypedValue;\r\nimport android.view.Gravity;\r\nimport android.view.View;\r\nimport android.widget.LinearLayout;\r\nimport android.widget.TableLayout;\r\nimport android.widget.TableRow;\r\nimport android.widget.TextView;\r\nimport android.widget.Toast;\r\n\r\n\r\nimport com.google.android.material.tabs.TabLayout;\r\n\r\nimport org.json.JSONArray;\r\nimport org.json.JSONException;\r\nimport org.json.JSONObject;\r\nimport org.w3c.dom.Text;\r\n\r\nimport java.util.ArrayList;\r\nimport java.util.Map;\r\n\r\n\r\npublic class FileCenter extends AppCompatActivity {\r\n\r\n    private String userName;\r\n    private String password;\r\n    private String company;\r\n    private SharedPreferences sharedPreferences;\r\n    private String companyName = \"default\";\r\n    private String auth_code = \"default\";\r\n    List<String[]> employeeFileInfo;\r\n\r\n    @Override\r\n    protected void onCreate(Bundle savedInstanceState) {\r\n        super.onCreate(savedInstanceState);\r\n        setContentView(R.layout.activity_file_center);\r\n        TextView loadingDisplay = findViewById(R.id.loadingDisplay);\r\n        loadingDisplay.setVisibility(View.INVISIBLE);\r\n        userName = getIntent().getStringExtra(\"userName\");\r\n        password = getIntent().getStringExtra(\"password\");\r\n        companyName = getIntent().getStringExtra(\"companyName\");\r\n        auth_code = getIntent().getStringExtra(\"auth_code\");\r\n        sharedPreferences = getSharedPreferences(\"my_preferences\", Context.MODE_PRIVATE);\r\n\r\n        // If the user is online get and display their data\r\n        ConnectivityManager cm = (ConnectivityManager)getSystemService(Context.CONNECTIVITY_SERVICE);\r\n        NetworkInfo activeNetwork = cm.getActiveNetworkInfo();\r\n        boolean isConnected = activeNetwork != null && activeNetwork.isConnectedOrConnecting();\r\n        if(isConnected) {\r\n            employeeFileInfo = new EmployeeFiles(userName, password, company, auth_code).retrieveInfo(userName, password, company);\r\n            // Storing file data\r\n            storeFileData();\r\n            // Creating and filling up tables\r\n            Map mapTableLayouts = createTables();\r\n\r\n            putInfoIntoTable(mapTableLayouts);\r\n\r\n            int file = 0;\r\n            for (Object table : mapTableLayouts.values()) {\r\n                setOnClickListenersToTableRows((TableLayout) table);\r\n            }\r\n        }\r\n        // If the user is offline, display last saved data\r\n        else {\r\n            // If there is saved data\r\n            if (sharedPreferences.getBoolean(\"saveFiles\", false)) {\r\n                // Convert saved data back to List<String[]>\r\n                employeeFileInfo = getStoredData();\r\n                // Creating and filling up tables with offline data\r\n                Map mapTableLayouts = createTables();\r\n                putInfoIntoTable(mapTableLayouts);\r\n\r\n                for (Object table : mapTableLayouts.values()) {\r\n                    setOnClickListenersToTableRows((TableLayout) table);\r\n                }\r\n            }\r\n            else {\r\n                // Handle the case when there is no saved data\r\n                Toast.makeText(FileCenter.this, \"No offline data available\", Toast.LENGTH_SHORT).show();\r\n            }\r\n        }\r\n    }\r\n\r\n\r\n    /**\r\n     * This method is used to store file data into shared preferences. It works by turning\r\n     * the arrays of data that represent a file into a string, and then stores that string\r\n     * into shared preferences.\r\n     */\r\n    private void storeFileData(){\r\n        sharedPreferences = getSharedPreferences(\"my_preferences\", Context.MODE_PRIVATE);\r\n        String fileName = \"file\";\r\n        int fileNum = 0;\r\n        SharedPreferences.Editor editor = sharedPreferences.edit();\r\n        // Put boolean that will indicate that file data has been stored\r\n        editor.putBoolean(\"saveFiles\", true);\r\n        Log.i(\"FILESAVE\", \"stringOfFileInfo\");\r\n        // Going through each file array from the backend\r\n        for(String[] file : employeeFileInfo){\r\n            // Creating a key for the string that will be saved\r\n            String keyForString = fileName + fileNum++;\r\n\r\n            String stringOfFileInfo = \"\";\r\n            // Turning the file array into a String\r\n            for(String info : file){\r\n                stringOfFileInfo = stringOfFileInfo + info;\r\n                stringOfFileInfo = stringOfFileInfo + \"][\";\r\n            }\r\n            // Saving the string\r\n            Log.i(\"FILESAVE\", stringOfFileInfo);\r\n            editor.putString(keyForString, stringOfFileInfo);\r\n        }\r\n        editor.apply();\r\n     }\r\n\r\n    /**\r\n     * This method is used to retrieve the stored files from shared preferences and turn them\r\n     * back into the type List<String[]> so the data can be used offline.\r\n     *\r\n     * @return\r\n     */\r\n    private List<String[]> getStoredData(){\r\n        sharedPreferences = getSharedPreferences(\"my_preferences\", Context.MODE_PRIVATE);\r\n        String fileName = \"file\";\r\n        int fileNum = 0;\r\n        boolean isMoreFiles = true;\r\n        List<String[]> files = new ArrayList<String[]>();\r\n        // While there are remaining files in shared preferences that haven't been pulled out\r\n        while(isMoreFiles){\r\n            // Making the key\r\n            String keyForString = fileName + fileNum++;\r\n            // Pulling out a file from shared preferences\r\n            String storedFileInfo = sharedPreferences.getString(keyForString, \"***\");\r\n            // If it is a valid file\r\n            Log.i(\"storegdin\", storedFileInfo);\r\n            if(!storedFileInfo.equals(\"***\")){\r\n                // Split the String data into an array\r\n                String[] file = storedFileInfo.split(\"\\\\]\\\\[\");\r\n                files.add(file);\r\n\r\n             }\r\n            // If the last thing pulled was not a file end the loop\r\n            else{\r\n                isMoreFiles = false;\r\n            }\r\n        }\r\n        return files;\r\n     }\r\n\r\n    /**\r\n     *\r\n     *\r\n     * @param table\r\n     */\r\n    private int iteratorForFiles = 1;\r\n    public void setOnClickListenersToTableRows(TableLayout table){\r\n        int numRowsTable = table.getChildCount();\r\n\r\n        for(int i = 0; i < numRowsTable; i++){\r\n            TableRow row = (TableRow) table.getChildAt(i);\r\n\r\n            // Extracting file name from the first TextView in the row\r\n            TextView fileNameView = (TextView) row.getChildAt(0);\r\n            String fileName = fileNameView.getText().toString();\r\n\r\n            // Getting file path of the row that is currently being set up\r\n            final String filePath = employeeFileInfo.get(iteratorForFiles)[3];\r\n            Log.i(\"filepath\", filePath);\r\n\r\n            row.setOnClickListener(new View.OnClickListener() {\r\n                @Override\r\n                public void onClick(View v) {\r\n                    openDownloadPopup(fileName, filePath);\r\n\r\n                }\r\n            });\r\n        }\r\n        // To skip header of each row\r\n        iteratorForFiles++;\r\n    }\r\n\r\n    /**\r\n     * https://stackoverflow.com/questions/2201917/how-can-i-open-a-url-in-androids-web-browser-from-my-application\r\n     * @param fileName\r\n     * @param filePath\r\n     */\r\n    private void openPDFInWebView(String fileName, String filePath) {\r\n        Intent browserIntent = new Intent(Intent.ACTION_VIEW, Uri.parse(filePath));\r\n        startActivity(browserIntent);\r\n    }\r\n    private void openDownloadPopup(String fileName, String filePath) {\r\n        AlertDialog.Builder builder = new AlertDialog.Builder(this);\r\n        builder.setTitle(\"Confirm Download\");\r\n        builder.setMessage(\"Do you want to download: \" + fileName + \"?\");\r\n\r\n        builder.setPositiveButton(\"Yes\", (dialog, which) -> {\r\n            // Open the PDF viewer directly\r\n            openPDFInWebView(fileName, filePath);\r\n        });\r\n\r\n        builder.setNegativeButton(\"No\", (dialog, which) -> {\r\n            // Handle the case when the user clicks \"No\"\r\n            Toast.makeText(FileCenter.this, \"Download canceled\", Toast.LENGTH_SHORT).show();\r\n        });\r\n\r\n        builder.show();\r\n    }\r\n\r\n    /**\r\n     * This methods fills up the tables in the file center with their corresponding information\r\n     * @param tables\r\n     */\r\n    public void putInfoIntoTable(Map <String, TableLayout> tables){\r\n\r\n        for (int i = 0; i < employeeFileInfo.size() ; i++) {\r\n            String[] fileData = employeeFileInfo.get(i);\r\n            // Creating new row\r\n            TableRow row = new TableRow(this);\r\n\r\n            // Creating text views that will be added to the row to show info\r\n            TextView fileNameView = new TextView(this);\r\n            fileNameView.setText(fileData[1]);\r\n            fileNameView.setGravity(Gravity.CENTER);\r\n            fileNameView.setWidth(convertDpToPx(this, 50));\r\n            fileNameView.setPadding(0,0, convertDpToPx(this, 10), 0);\r\n\r\n\r\n            TextView fileUploaderView = new TextView(this);\r\n            fileUploaderView.setText(fileData[5] + \", \" + fileData[4]);\r\n            fileUploaderView.setGravity(Gravity.CENTER);\r\n            fileUploaderView.setWidth(convertDpToPx(this, 50));\r\n\r\n            TextView dateView = new TextView(this);\r\n            dateView.setText(fileData[2]);\r\n            dateView.setGravity(Gravity.CENTER);\r\n\r\n            // Adding the new views to the row\r\n            row.addView(fileNameView);\r\n            row.addView(fileUploaderView);\r\n            row.addView(dateView);\r\n\r\n            // Adding padding to the row\r\n\r\n            row.setPadding(0,convertDpToPx(this,10),0,convertDpToPx(this,5));\r\n\r\n\r\n            // Putting the row into the correct table\r\n            String  fileCenterType = fileData[6]; // file center type which is also table title\r\n            //fileCenterType = sanitizeFileCenterType(fileCenterType);\r\n\r\n            if(fileCenterType != null){\r\n                tables.get(fileCenterType).addView(row);\r\n                //Getting index of added row\r\n                int indexOfLastChild = tables.get(fileCenterType).getChildCount() - 1;\r\n                // setting the color of row to gray if its index is odd\r\n                if(indexOfLastChild % 2 == 1){\r\n                    row.setBackgroundColor(getResources().getColor(R.color.odd_row_color));\r\n                }\r\n\r\n            }\r\n\r\n        }\r\n\r\n    }\r\n\r\n    /**\r\n     * This method creates tables in the file center\r\n     * @return\r\n     */\r\n    public Map <String, TableLayout> createTables(){\r\n\r\n        Map <String, TableLayout> mapOfFileCenterTypesToTableLayouts = new HashMap<>(); // stores the file center categories\r\n        for (int i = 0; i < employeeFileInfo.size() ; i++){\r\n            // Looping through all the files\r\n            String[] fileData = employeeFileInfo.get(i); // array of information about the file\r\n            String  fileCenterType = fileData[6]; // file center type which is also table title\r\n\r\n            if(!mapOfFileCenterTypesToTableLayouts.containsKey(fileCenterType)){ // if table not already there for file type\r\n\r\n                // Finding the body of the file center\r\n                LinearLayout fileCenterBody = findViewById(R.id.file_center_body);\r\n                // Creating a title of the table and setting it up\r\n                TextView tableTitle = new TextView(this);\r\n                tableTitle.setText(fileCenterType);\r\n                LinearLayout titleContainer = new LinearLayout(this);\r\n                setUpTableTitles(titleContainer, tableTitle);\r\n\r\n\r\n                //Creating the table\r\n                TableLayout newTable = new TableLayout(this);\r\n                setUpTableLayout(newTable);\r\n\r\n                // Adding title and empty table to file center body\r\n                fileCenterBody.addView(titleContainer);\r\n                fileCenterBody.addView(newTable);\r\n\r\n                // Adding the table to the map\r\n                mapOfFileCenterTypesToTableLayouts.put(fileCenterType,newTable);\r\n\r\n                // Adding header to table\r\n\r\n                setUpTableHeader(newTable);\r\n\r\n            }\r\n        }\r\n\r\n        return mapOfFileCenterTypesToTableLayouts;\r\n    }\r\n    /**\r\n     * This method sets up the title of a table. It puts the textview into a larger container, constrains the container,\r\n     * and applies layout modification such as margins, and position an the screen\r\n     * @param titleContainer\r\n     * @param tableTitle\r\n     */\r\n    public void setUpTableTitles(LinearLayout titleContainer, TextView tableTitle){\r\n\r\n        titleContainer.addView(tableTitle);\r\n        tableTitle.setPaintFlags(tableTitle.getPaintFlags() |   Paint.UNDERLINE_TEXT_FLAG);\r\n        tableTitle.setTextSize(TypedValue.COMPLEX_UNIT_SP, 18f);\r\n\r\n        // Setting layout parameters to be applied\r\n        LinearLayout.LayoutParams layoutParams = new LinearLayout.LayoutParams(\r\n                LinearLayout.LayoutParams.MATCH_PARENT,  // Width\r\n                LinearLayout.LayoutParams.WRAP_CONTENT   // Height\r\n        );\r\n        layoutParams.setMargins(convertDpToPx(this,30), 0, 0, convertDpToPx(this,15));\r\n\r\n        titleContainer.setLayoutParams(layoutParams); // Applying layout params to container\r\n        tableTitle.setTextSize(TypedValue.COMPLEX_UNIT_SP, 22f);\r\n    }\r\n\r\n    /**\r\n     * This method sets the header of the table. It describes the columns, showing file name, publisher, and date\r\n     * @param table\r\n     */\r\n    public void setUpTableHeader(TableLayout table){\r\n\r\n        // Setting row element and background colour\r\n        TableRow row = new TableRow(this);\r\n        row.setBackgroundColor(getResources().getColor(R.color.dark_grey));\r\n\r\n        // Setting layout parameters to be applied\r\n        LinearLayout.LayoutParams layoutParams = new LinearLayout.LayoutParams(\r\n                LinearLayout.LayoutParams.MATCH_PARENT,  // Width\r\n                LinearLayout.LayoutParams.WRAP_CONTENT   // Height\r\n        );\r\n        layoutParams.setMargins(convertDpToPx(this,15), 0, 0, 7);\r\n\r\n        // Setting up the text views\r\n\r\n        // Setting up file name text view\r\n        TextView fileName = new TextView(this);\r\n        fileName.setText(\"File Name\");\r\n        fileName.setGravity(Gravity.CENTER);\r\n        fileName.setTypeface(Typeface.DEFAULT_BOLD);\r\n        fileName.setTextColor(getResources().getColor(R.color.white));\r\n\r\n        // Setting up publisher text view\r\n        TextView publisher = new TextView(this);\r\n        publisher.setText(\"Publisher\");\r\n        publisher.setGravity(Gravity.CENTER);\r\n        publisher.setTypeface(Typeface.DEFAULT_BOLD);\r\n        publisher.setTextColor(Color.WHITE);\r\n\r\n        // Setting up date textview\r\n        TextView date = new TextView(this);\r\n        date.setText(\"Date\");\r\n        date.setGravity(Gravity.CENTER);\r\n        date.setTypeface(Typeface.DEFAULT_BOLD);\r\n        date.setTextColor(Color.WHITE);\r\n\r\n        // Adding the textviews to the row\r\n        row.addView(fileName);\r\n        row.addView(publisher);\r\n        row.addView(date);\r\n\r\n        // Adding the row to the table\r\n\r\n        table.addView(row);\r\n\r\n\r\n\r\n    }\r\n\r\n    /**\r\n     * This method makes a view span over two columns in a table\r\n     * @param viewWithinRow\r\n     */\r\n    public void spanElementOverTwoColumns(View viewWithinRow){\r\n\r\n        LinearLayout.LayoutParams param = new LinearLayout.LayoutParams(\r\n                TableRow.LayoutParams.MATCH_PARENT,\r\n                TableRow.LayoutParams.MATCH_PARENT,\r\n                2.0f\r\n        );\r\n        viewWithinRow.setLayoutParams(param);\r\n    }\r\n\r\n\r\n\r\n    /**\r\n     * This method applies proper layout formatting to the tables within the File Center\r\n     * @param table\r\n     */\r\n    public void setUpTableLayout(TableLayout table){\r\n\r\n        // Setting layout parameters to be applied\r\n        LinearLayout.LayoutParams layoutParams = new LinearLayout.LayoutParams(\r\n                LinearLayout.LayoutParams.MATCH_PARENT,\r\n                LinearLayout.LayoutParams.WRAP_CONTENT\r\n        );\r\n        layoutParams.setMargins(convertDpToPx(this,20), 0,convertDpToPx(this,20),0 );\r\n        table.setLayoutParams(layoutParams);\r\n        table.setPadding(0,0,0,convertDpToPx(this,20));\r\n\r\n        table.setColumnStretchable(0,true);\r\n        table.setColumnStretchable(2, true);\r\n\r\n    }\r\n\r\n    /**\r\n     * This method converts dp units to pixels\r\n     * @param context\r\n     * @param dp\r\n     * @return\r\n     */\r\n    public static int convertDpToPx(Context context, float dp) {\r\n        return (int) (dp * context.getResources().getDisplayMetrics().density);\r\n    }\r\n\r\n    //==============================================================================================\r\n    //                              methods for switching page\r\n    //==============================================================================================\r\n    /**\r\n     * Opens the profile page\r\n     * @param myView\r\n     */\r\n    public void openProfile(View myView){\r\n        TextView loadingDisplay = findViewById(R.id.loadingDisplay);\r\n        loadingDisplay.setVisibility(View.VISIBLE);\r\n        Intent intent = new Intent(this, UserProfile.class);\r\n        intent.putExtra(\"userName\", userName);\r\n        intent.putExtra(\"password\", password);\r\n        intent.putExtra(\"companyName\", companyName);\r\n        intent.putExtra(\"auth_code\", auth_code);\r\n        startActivity(intent);\r\n        finish();\r\n    }\r\n\r\n    /**\r\n     * Opens the time sheet page\r\n     * @param myView\r\n     */\r\n    public void openTimeSheet(View myView){\r\n        TextView loadingDisplay = findViewById(R.id.loadingDisplay);\r\n        loadingDisplay.setVisibility(View.VISIBLE);\r\n        Intent intent = new Intent(this, Timesheets.class);\r\n        intent.putExtra(\"userName\", userName);\r\n        intent.putExtra(\"password\", password);\r\n        intent.putExtra(\"companyName\", companyName);\r\n        intent.putExtra(\"auth_code\", auth_code);\r\n        startActivity(intent);\r\n        finish();\r\n    }\r\n    /**\r\n     * Logs the user out, takes user back to log in page and clears their data\r\n     * @param myView\r\n     */\r\n    public void logout(View myView){\r\n        Intent intent = new Intent(this, MainActivity.class);\r\n        sharedPreferences = getSharedPreferences(\"my_preferences\", Context.MODE_PRIVATE);\r\n        SharedPreferences.Editor editor = sharedPreferences.edit();\r\n        editor.clear();\r\n        editor.apply();\r\n        startActivity(intent);\r\n        finish();\r\n    }\r\n}
+Subsystem: com.intellij.openapi.diff.impl.patch.CharsetEP
+<+>UTF-8
+===================================================================
+diff --git a/app/src/main/java/com/example/wolseytechhr/FileCenter.java b/app/src/main/java/com/example/wolseytechhr/FileCenter.java
+--- a/app/src/main/java/com/example/wolseytechhr/FileCenter.java	(revision 367272713d725abea12149843840b0500a060b81)
++++ b/app/src/main/java/com/example/wolseytechhr/FileCenter.java	(date 1705509819947)
+@@ -2,6 +2,9 @@
+ 
+ import androidx.appcompat.app.AlertDialog;
+ import androidx.appcompat.app.AppCompatActivity;
++import androidx.recyclerview.widget.LinearLayoutManager;
++import androidx.recyclerview.widget.RecyclerView;
++import androidx.recyclerview.widget.SimpleItemAnimator;
+ 
+ import android.content.Context;
+ import android.content.Intent;
+@@ -47,6 +50,7 @@
+     private String companyName = "default";
+     private String auth_code = "default";
+     List<String[]> employeeFileInfo;
++    RecyclerView recyclerView; // This allows the scrolling of dynamic content
+ 
+     @Override
+     protected void onCreate(Bundle savedInstanceState) {
+@@ -69,10 +73,17 @@
+             // Storing file data
+             storeFileData();
+             // Creating and filling up tables
+-            Map mapTableLayouts = createTables();
+-
++            LinkedHashMap mapTableLayouts = createTables();
+             putInfoIntoTable(mapTableLayouts);
+ 
++
++            // Creating an adapter for the recycle view
++            recyclerView = findViewById(R.id.file_center_body);
++            RecycleViewAdapter recycleViewAdapter = new RecycleViewAdapter(this, mapTableLayouts);
++            recyclerView.setAdapter(recycleViewAdapter);
++            recyclerView.setLayoutManager(new LinearLayoutManager(this));
++
++
+             int file = 0;
+             for (Object table : mapTableLayouts.values()) {
+                 setOnClickListenersToTableRows((TableLayout) table);
+@@ -283,11 +294,12 @@
+ 
+     /**
+      * This method creates tables in the file center
+-     * @return
++     * It takes care of the layout of the tables and the table titles
++     * @return LinkedHashMap mapping Strings (Table titles) to tableLayouts.
+      */
+-    public Map <String, TableLayout> createTables(){
++    public LinkedHashMap <String, TableLayout> createTables(){
+ 
+-        Map <String, TableLayout> mapOfFileCenterTypesToTableLayouts = new HashMap<>(); // stores the file center categories
++        LinkedHashMap <String, TableLayout> mapOfFileCenterTypesToTableLayouts = new LinkedHashMap<>(); // stores the file center categories
+         for (int i = 0; i < employeeFileInfo.size() ; i++){
+             // Looping through all the files
+             String[] fileData = employeeFileInfo.get(i); // array of information about the file
+@@ -296,7 +308,7 @@
+             if(!mapOfFileCenterTypesToTableLayouts.containsKey(fileCenterType)){ // if table not already there for file type
+ 
+                 // Finding the body of the file center
+-                LinearLayout fileCenterBody = findViewById(R.id.file_center_body);
++                //LinearLayout fileCenterBody = findViewById(R.id.file_center_body);
+                 // Creating a title of the table and setting it up
+                 TextView tableTitle = new TextView(this);
+                 tableTitle.setText(fileCenterType);
+@@ -309,8 +321,8 @@
+                 setUpTableLayout(newTable);
+ 
+                 // Adding title and empty table to file center body
+-                fileCenterBody.addView(titleContainer);
+-                fileCenterBody.addView(newTable);
++                //fileCenterBody.addView(titleContainer);
++                //fileCenterBody.addView(newTable);
+ 
+                 // Adding the table to the map
+                 mapOfFileCenterTypesToTableLayouts.put(fileCenterType,newTable);
+Index: app/src/main/res/layout/activity_file_center.xml
+IDEA additional info:
+Subsystem: com.intellij.openapi.diff.impl.patch.BaseRevisionTextPatchEP
+<+><?xml version=\"1.0\" encoding=\"utf-8\"?>\r\n<androidx.constraintlayout.widget.ConstraintLayout xmlns:android=\"http://schemas.android.com/apk/res/android\"\r\n    xmlns:app=\"http://schemas.android.com/apk/res-auto\"\r\n    xmlns:tools=\"http://schemas.android.com/tools\"\r\n    android:layout_width=\"match_parent\"\r\n    android:layout_height=\"match_parent\"\r\n    tools:context=\".MainPage\">\r\n    <!-- Top part of page starts here -->\r\n\r\n\r\n    <ImageView\r\n        android:id=\"@+id/logo\"\r\n        android:layout_width=\"108dp\"\r\n        android:layout_height=\"55dp\"\r\n        android:layout_marginStart=\"4dp\"\r\n        android:layout_marginTop=\"4dp\"\r\n        app:layout_constraintStart_toStartOf=\"parent\"\r\n        app:layout_constraintTop_toTopOf=\"parent\"\r\n        app:srcCompat=\"@drawable/wolseylogo\" />\r\n\r\n    <TextView\r\n        android:id=\"@+id/TrackingSystemTitle\"\r\n        android:layout_width=\"wrap_content\"\r\n        android:layout_height=\"wrap_content\"\r\n        android:layout_marginStart=\"128dp\"\r\n        android:layout_marginTop=\"16dp\"\r\n        android:fontFamily=\"@font/helvetica_roman\"\r\n        android:text=\"Tracking System\"\r\n        android:textColor=\"@color/black\"\r\n        android:textSize=\"20dp\"\r\n        app:layout_constraintStart_toStartOf=\"parent\"\r\n        app:layout_constraintTop_toTopOf=\"parent\" />\r\n\r\n    <LinearLayout\r\n        android:id=\"@+id/backPanel\"\r\n        android:layout_width=\"match_parent\"\r\n        android:layout_height=\"35dp\"\r\n        android:layout_marginTop=\"100dp\"\r\n        android:background=\"@color/dark_blue\"\r\n        app:layout_constraintStart_toStartOf=\"parent\"\r\n        app:layout_constraintTop_toTopOf=\"parent\">\r\n        <!--android:background=\"#6AA0EF\"-->\r\n\r\n        <TextView\r\n            android:id=\"@+id/profileButton\"\r\n            android:layout_width=\"wrap_content\"\r\n            android:layout_height=\"wrap_content\"\r\n            android:layout_marginLeft=\"20sp\"\r\n            android:layout_weight=\"1\"\r\n            android:fontFamily=\"@font/helvetica_roman\"\r\n            android:onClick=\"openProfile\"\r\n            android:paddingVertical=\"5dp\"\r\n            android:text=\"Profile\"\r\n            android:textColor=\"@color/white\"\r\n            android:textSize=\"20dp\"\r\n            app:layout_constraintStart_toStartOf=\"parent\" />\r\n\r\n        <TextView\r\n            android:id=\"@+id/FileCenterText\"\r\n            android:layout_width=\"wrap_content\"\r\n            android:layout_height=\"wrap_content\"\r\n            android:layout_weight=\"1\"\r\n            android:fontFamily=\"@font/helvetica_roman\"\r\n            android:paddingVertical=\"5dp\"\r\n            android:text=\"File Center\"\r\n            android:textColor=\"@color/white\"\r\n            android:textSize=\"20dp\"\r\n            app:layout_constraintStart_toStartOf=\"parent\"\r\n            app:layout_constraintTop_toTopOf=\"parent\" />\r\n\r\n        <TextView\r\n            android:id=\"@+id/UserProfiletext\"\r\n            android:layout_width=\"wrap_content\"\r\n            android:layout_height=\"wrap_content\"\r\n            android:layout_weight=\"1\"\r\n            android:fontFamily=\"@font/helvetica_roman\"\r\n            android:onClick=\"openTimeSheet\"\r\n            android:text=\"Time Sheet\"\r\n            android:textColor=\"@color/white\"\r\n            android:textSize=\"20dp\"\r\n            app:layout_constraintStart_toStartOf=\"parent\"\r\n            app:layout_constraintTop_toTopOf=\"parent\" />\r\n\r\n    </LinearLayout>\r\n\r\n    <ImageView\r\n        android:id=\"@+id/logoutButton\"\r\n        android:layout_width=\"95dp\"\r\n        android:layout_height=\"43dp\"\r\n        android:layout_marginTop=\"4dp\"\r\n        android:layout_marginEnd=\"4dp\"\r\n        android:onClick=\"logout\"\r\n        app:layout_constraintEnd_toEndOf=\"parent\"\r\n        app:layout_constraintTop_toTopOf=\"parent\"\r\n        app:srcCompat=\"@drawable/logout\" />\r\n\r\n    <TextView\r\n        android:id=\"@+id/loadingDisplay\"\r\n        android:layout_width=\"wrap_content\"\r\n        android:layout_height=\"wrap_content\"\r\n        android:layout_marginStart=\"177dp\"\r\n        android:layout_marginTop=\"46dp\"\r\n        android:text=\"Loading\"\r\n        android:textSize=\"20dp\"\r\n        android:visibility=\"invisible\"\r\n        app:layout_constraintStart_toStartOf=\"parent\"\r\n        app:layout_constraintTop_toTopOf=\"parent\" />\r\n\r\n    <TextView\r\n        android:id=\"@+id/noInternetDisplay\"\r\n        android:layout_width=\"wrap_content\"\r\n        android:layout_height=\"wrap_content\"\r\n        android:layout_marginStart=\"148dp\"\r\n        android:layout_marginTop=\"80dp\"\r\n        android:text=\"No Internet Connection\"\r\n        android:textColor=\"#E60505\"\r\n        android:visibility=\"invisible\"\r\n        app:layout_constraintStart_toStartOf=\"parent\"\r\n        app:layout_constraintTop_toTopOf=\"parent\" />\r\n\r\n    <!-- Top part of page ends here -->\r\n\r\n    <ScrollView\r\n        android:layout_width=\"407dp\"\r\n        android:layout_height=\"701dp\"\r\n        android:layout_marginTop=\"132dp\"\r\n        app:layout_constraintStart_toStartOf=\"parent\"\r\n        app:layout_constraintTop_toTopOf=\"parent\">\r\n\r\n        <LinearLayout\r\n            android:id=\"@+id/file_center_body\"\r\n            android:layout_width=\"match_parent\"\r\n            android:layout_height=\"0dp\"\r\n            android:layout_marginTop=\"30dp\"\r\n            android:orientation=\"vertical\">\r\n\r\n            <LinearLayout\r\n                android:layout_width=\"409dp\"\r\n                android:layout_height=\"62dp\"\r\n                android:layout_marginStart=\"1dp\"\r\n                android:orientation=\"horizontal\"\r\n                app:layout_constraintStart_toStartOf=\"parent\"\r\n                app:layout_constraintTop_toTopOf=\"parent\">\r\n\r\n                <TextView\r\n                    android:layout_width=\"wrap_content\"\r\n                    android:layout_height=\"match_parent\"\r\n                    android:layout_marginLeft=\"20dp\"\r\n                    android:layout_marginTop=\"20dp\"\r\n                    android:fontFamily=\"@font/helvetica_roman\"\r\n                    android:text=\"File Center\"\r\n                    android:textColor=\"@color/black\"\r\n                    android:textSize=\"25dp\"\r\n                    android:textStyle=\"bold\" />\r\n            </LinearLayout>\r\n\r\n        </LinearLayout>\r\n\r\n\r\n    </ScrollView>\r\n\r\n\r\n    <!-- Top part of page ends here -->\r\n\r\n</androidx.constraintlayout.widget.ConstraintLayout>
+Subsystem: com.intellij.openapi.diff.impl.patch.CharsetEP
+<+>UTF-8
+===================================================================
+diff --git a/app/src/main/res/layout/activity_file_center.xml b/app/src/main/res/layout/activity_file_center.xml
+--- a/app/src/main/res/layout/activity_file_center.xml	(revision 367272713d725abea12149843840b0500a060b81)
++++ b/app/src/main/res/layout/activity_file_center.xml	(date 1705509620473)
+@@ -31,6 +31,18 @@
+         app:layout_constraintStart_toStartOf="parent"
+         app:layout_constraintTop_toTopOf="parent" />
+ 
++    <CheckBox
++        android:id="@+id/darkModeCheckBox"
++        android:layout_width="wrap_content"
++        android:layout_height="wrap_content"
++        android:layout_alignParentTop="true"
++        android:layout_alignParentEnd="true"
++        android:layout_marginStart="280dp"
++        android:layout_marginTop="56dp"
++        android:text="Dark Mode"
++        app:layout_constraintStart_toStartOf="parent"
++        app:layout_constraintTop_toTopOf="parent" />
++
+     <LinearLayout
+         android:id="@+id/backPanel"
+         android:layout_width="match_parent"
+@@ -87,10 +99,10 @@
+         android:id="@+id/logoutButton"
+         android:layout_width="95dp"
+         android:layout_height="43dp"
++        android:layout_marginStart="312dp"
+         android:layout_marginTop="4dp"
+-        android:layout_marginEnd="4dp"
+         android:onClick="logout"
+-        app:layout_constraintEnd_toEndOf="parent"
++        app:layout_constraintStart_toStartOf="parent"
+         app:layout_constraintTop_toTopOf="parent"
+         app:srcCompat="@drawable/logout" />
+ 
+@@ -119,45 +131,61 @@
+         app:layout_constraintTop_toTopOf="parent" />
+ 
+     <!-- Top part of page ends here -->
+-
++    <!--
+     <ScrollView
+         android:layout_width="407dp"
+         android:layout_height="701dp"
+         android:layout_marginTop="132dp"
+         app:layout_constraintStart_toStartOf="parent"
++        app:layout_constraintTop_toTopOf="parent"> -->
++
++    <androidx.recyclerview.widget.RecyclerView
++        android:id="@+id/file_center_body"
++        android:layout_width="match_parent"
++        android:layout_height="599dp"
++        android:layout_marginTop="134dp"
++        app:layoutManager="androidx.recyclerview.widget.LinearLayoutManager"
++        app:layout_constraintEnd_toEndOf="parent"
++        app:layout_constraintHorizontal_bias="0.0"
++        app:layout_constraintStart_toStartOf="parent"
+         app:layout_constraintTop_toTopOf="parent">
+ 
+-        <LinearLayout
+-            android:id="@+id/file_center_body"
++        <!-- <LinearLayout
++
+             android:layout_width="match_parent"
+             android:layout_height="0dp"
+             android:layout_marginTop="30dp"
+-            android:orientation="vertical">
+-
+-            <LinearLayout
+-                android:layout_width="409dp"
+-                android:layout_height="62dp"
+-                android:layout_marginStart="1dp"
+-                android:orientation="horizontal"
+-                app:layout_constraintStart_toStartOf="parent"
+-                app:layout_constraintTop_toTopOf="parent">
++            android:orientation="vertical"
++            app:layout_constraintStart_toStartOf="parent"
++            app:layout_constraintTop_toTopOf="parent"> -->
++        <!--
++        <LinearLayout
++            android:layout_width="409dp"
++            android:layout_height="62dp"
++            android:layout_marginStart="1dp"
++            android:orientation="horizontal"
++            app:layout_constraintStart_toStartOf="parent"
++            app:layout_constraintTop_toTopOf="parent">
+ 
+-                <TextView
+-                    android:layout_width="wrap_content"
+-                    android:layout_height="match_parent"
+-                    android:layout_marginLeft="20dp"
+-                    android:layout_marginTop="20dp"
+-                    android:fontFamily="@font/helvetica_roman"
+-                    android:text="File Center"
+-                    android:textColor="@color/black"
+-                    android:textSize="25dp"
+-                    android:textStyle="bold" />
+-            </LinearLayout>
++            <TextView
++                android:layout_width="wrap_content"
++                android:layout_height="match_parent"
++                android:layout_marginLeft="20dp"
++                android:layout_marginTop="20dp"
++                android:fontFamily="@font/helvetica_roman"
++                android:text="File Center"
++                android:textColor="@color/black"
++                android:textSize="25dp"
++                android:textStyle="bold" />
++        </LinearLayout> -->
++
++        <!-- </LinearLayout> -->
+ 
+-        </LinearLayout>
+ 
++    </androidx.recyclerview.widget.RecyclerView>
+ 
+-    </ScrollView>
++
++    <!--</ScrollView> -->
+ 
+ 
+     <!-- Top part of page ends here -->
+Index: app/src/main/res/layout/file_center_table.xml
+IDEA additional info:
+Subsystem: com.intellij.openapi.diff.impl.patch.CharsetEP
+<+>UTF-8
+===================================================================
+diff --git a/app/src/main/res/layout/file_center_table.xml b/app/src/main/res/layout/file_center_table.xml
+new file mode 100644
+--- /dev/null	(date 1705509759763)
++++ b/app/src/main/res/layout/file_center_table.xml	(date 1705509759763)
+@@ -0,0 +1,30 @@
++<?xml version="1.0" encoding="utf-8"?>
++<androidx.constraintlayout.widget.ConstraintLayout xmlns:android="http://schemas.android.com/apk/res/android"
++    xmlns:app="http://schemas.android.com/apk/res-auto"
++    xmlns:tools="http://schemas.android.com/tools"
++    android:layout_width="match_parent"
++    android:layout_height="wrap_content">
++
++
++    <TextView
++        android:id="@+id/tableTitle"
++        android:layout_width="match_parent"
++        android:layout_height="wrap_content"
++        android:layout_marginStart="20dp"
++        android:layout_marginTop="16dp"
++        android:text="Textview"
++        app:layout_constraintStart_toStartOf="parent"
++        app:layout_constraintTop_toTopOf="parent" />
++
++    <LinearLayout
++        android:id="@+id/sampleTable"
++        android:layout_width="match_parent"
++        android:layout_height="wrap_content"
++        android:layout_marginTop="60dp"
++        android:orientation="horizontal"
++        app:layout_constraintStart_toStartOf="parent"
++        app:layout_constraintTop_toTopOf="parent"
++
++        />
++
++</androidx.constraintlayout.widget.ConstraintLayout>
+\ No newline at end of file
+Index: app/src/main/java/com/example/wolseytechhr/RecycleViewAdapter.java
+IDEA additional info:
+Subsystem: com.intellij.openapi.diff.impl.patch.CharsetEP
+<+>UTF-8
+===================================================================
+diff --git a/app/src/main/java/com/example/wolseytechhr/RecycleViewAdapter.java b/app/src/main/java/com/example/wolseytechhr/RecycleViewAdapter.java
+new file mode 100644
+--- /dev/null	(date 1705509010392)
++++ b/app/src/main/java/com/example/wolseytechhr/RecycleViewAdapter.java	(date 1705509010392)
+@@ -0,0 +1,136 @@
++package com.example.wolseytechhr;
++
++import android.content.Context;
++import android.graphics.Paint;
++import android.util.Log;
++import android.util.TypedValue;
++import android.view.LayoutInflater;
++import android.view.View;
++import android.view.ViewGroup;
++import android.widget.LinearLayout;
++import android.widget.TableLayout;
++import android.widget.TextView;
++
++import androidx.annotation.NonNull;
++import androidx.recyclerview.widget.RecyclerView;
++
++import java.util.LinkedHashMap;
++import java.util.Map;
++
++public class RecycleViewAdapter extends RecyclerView.Adapter<RecycleViewAdapter.ViewHolder> {
++
++    LinkedHashMap<String, TableLayout> tables;
++    Context context;
++    /**
++     * Constructor for table adapter
++     * @param context
++     * @param tables
++     */
++    public RecycleViewAdapter(Context context, LinkedHashMap<String, TableLayout> tables){
++
++        this.context = context;
++        this.tables = tables;
++
++
++    }
++    /**
++     * @param parent   The ViewGroup into which the new View will be added after it is bound to
++     *                 an adapter position.
++     * @param viewType The view type of the new View.
++     * @return
++     */
++    @NonNull
++    @Override
++    public ViewHolder onCreateViewHolder(@NonNull ViewGroup parent, int viewType) {
++
++        LayoutInflater inflater = LayoutInflater.from(context);
++        View view = inflater.inflate(R.layout.file_center_table, parent, false);
++        return new ViewHolder(view);
++    }
++    /**
++     * @param holder   The ViewHolder which should be updated to represent the contents of the
++     *                 item at the given position in the data set.
++     * @param position The position of the item within the adapter's data set.
++     */
++    @Override
++    public void onBindViewHolder(@NonNull ViewHolder holder, int position) {
++
++        //Log.e("RecycleViewAdapter", "onBindViewHolder - Start for position: " + position);
++
++        String title = getTableTitleAtIndex(tables, position);
++        TableLayout tableLayout = getTableLayoutAtIndex(tables, position);
++
++        if (title != null) {
++            holder.tableTitle.setText(title);
++            holder.tableTitle.setTextSize(TypedValue.COMPLEX_UNIT_SP, 22f);
++            holder.tableTitle.setPaintFlags(holder.tableTitle.getPaintFlags() |   Paint.UNDERLINE_TEXT_FLAG);
++        }
++
++        if (tableLayout != null) {
++           holder.table.removeAllViews();  // Clear existing views
++
++            holder.table.addView(tableLayout);
++        }
++       // Log.e("RecycleViewAdapter", "onBindViewHolder - End for position: " + position);
++    }
++
++    /**
++     * @return
++     */
++    @Override
++    public int getItemCount() {
++        return tables.size();
++    }
++
++    public class ViewHolder extends RecyclerView.ViewHolder {
++
++        TextView tableTitle;
++        LinearLayout table;
++        public ViewHolder(@NonNull View itemView) {
++            super(itemView);
++            tableTitle = itemView.findViewById(R.id.tableTitle);
++            table = itemView.findViewById(R.id.sampleTable);
++        }
++    }
++    public static TableLayout[] convertMapToArray(LinkedHashMap<String, TableLayout> map){
++
++        TableLayout[] array = new TableLayout[map.size()];
++
++        int index = 0;
++        for(Map.Entry<String, TableLayout> entry: map.entrySet()){
++            array[index] = entry.getValue();
++            index++;
++        }
++        return array;
++    }
++
++    /**
++     * This method returns the table title at a particular index of the map
++     * @param map
++     * @param index
++     * @return
++     */
++    public static String getTableTitleAtIndex(LinkedHashMap <String, TableLayout> map, int index){
++
++        int i = 0; // counter variable
++        for(Map.Entry<String, TableLayout> entry: map.entrySet()){
++            if(i == index){
++                return entry.getKey(); // returning table title at that index
++            }
++            i++; // increasing counter
++        }
++        return "No Title available";
++    }
++
++    public static TableLayout getTableLayoutAtIndex(LinkedHashMap <String, TableLayout> map, int index){
++
++        int i = 0; // counter variable
++        for(Map.Entry<String, TableLayout> entry: map.entrySet()){
++            if(i == index){
++                return entry.getValue(); // returning table title at that index
++            }
++            i++; // increasing counter
++        }
++        return null;
++    }
++}
